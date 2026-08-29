@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>City Traffic Operations Command Center | GIS & ANPR Telemetry</title>
+  
+  <!-- Google Fonts: Rajdhani, Outfit, Share Tech Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Rajdhani:wght@500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet GIS CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Custom Design Tokens & Command Center Stylesheet -->
+  <link rel="stylesheet" href="static/css/style.css" />
+</head>
+<body>
+
+  <!-- Main Application Shell -->
+  <div class="app-container">
+    
+    <!-- Top Command Center Header -->
+    <header class="command-header">
+      <div class="header-left">
+        <div class="logo-badge">
+          <div class="logo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <circle cx="12" cy="12" r="9"/>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <h1>BEL <span>TRAFFIC-OPS</span> <span class="badge-tag">AI-ANPR v3.4</span></h1>
+            <div class="logo-subtitle">INTELLIGENT GIS TELEMETRY & MULTI-CAMERA SURVEILLANCE</div>
+          </div>
+        </div>
+
+        <!-- Single Plate Trajectory Search Bar -->
+        <div class="header-search">
+          <div class="search-input-wrapper">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="plate-search-bar" class="plate-search-input" placeholder="Search License Plate (e.g. HR26DQ5551)..." autocomplete="off" />
+            <button class="search-submit-btn" id="btn-submit-search" title="Track Trajectory">&#10140;</button>
+          </div>
+          <!-- Autocomplete Dropdown -->
+          <div class="search-suggestions" id="search-suggestions-box">
+            <div class="suggestion-item" data-plate="HR26DQ5551">
+              <span class="suggestion-plate">HR26DQ5551</span>
+              <span class="suggestion-type">Hyundai Verna (White) - 6 Hops</span>
+            </div>
+            <div class="suggestion-item" data-plate="DL01AB1234">
+              <span class="suggestion-plate" style="color: var(--accent-red);">DL01AB1234</span>
+              <span class="suggestion-type" style="color: var(--accent-red);">⚠️ STOLEN HOTLIST - Fortuner</span>
+            </div>
+            <div class="suggestion-item" data-plate="KA03MG8899">
+              <span class="suggestion-plate">KA03MG8899</span>
+              <span class="suggestion-type">Tata Nexon EV - 3 Hops</span>
+            </div>
+            <div class="suggestion-item" data-plate="MH02CB4040">
+              <span class="suggestion-plate">MH02CB4040</span>
+              <span class="suggestion-type">Mercedes E-Class - 4 Hops</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Header Telemetry & Controls -->
+      <div class="header-right">
+        <div class="telemetry-metrics">
+          <div class="metric-pill">
+            <div class="camera-pulse-dot green" id="ws-status-dot" style="width: 8px; height: 8px;"></div>
+            <div>
+              <div class="metric-label" id="ws-status-text">LIVE FEED</div>
+              <div class="metric-value green">ONLINE</div>
+            </div>
+          </div>
+
+          <div class="metric-pill">
+            <div>
+              <div class="metric-label">ACTIVE CAMS</div>
+              <div class="metric-value cyan" id="kpi-active-cams">12 / 12</div>
+            </div>
+          </div>
+
+          <div class="metric-pill">
+            <div>
+              <div class="metric-label">DETECT RATE</div>
+              <div class="metric-value amber"><span id="kpi-dpm">438</span> /min</div>
+            </div>
+          </div>
+
+          <div class="metric-pill">
+            <div>
+              <div class="metric-label">AVG VELOCITY</div>
+              <div class="metric-value" id="kpi-avg-speed">52.4 km/h</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hud-clock">
+          <div id="clock-ist" style="font-weight: 700; letter-spacing: 1px;">--:--:-- IST</div>
+          <div id="clock-utc" class="clock-utc">--:--:-- UTC</div>
+        </div>
+
+        <div class="nav-action-btns">
+          <button class="icon-btn" id="btn-toggle-analytics" title="Open Urban Traffic Analytics Dashboard">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </button>
+          <button class="icon-btn" id="btn-toggle-sound" title="Toggle Alarm Audio Chime">
+            🔔
+          </button>
+          <button class="icon-btn" id="btn-alerts-indicator" title="Active Security Watchlist Alerts">
+            ⚠️
+            <span class="badge" id="active-alerts-count">3</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Command Workspace Grid -->
+    <main class="main-workspace" id="main-workspace-grid">
+      
+      <!-- Left Sidebar: Trajectory Inspection & Camera Directory -->
+      <aside class="sidebar-left">
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" data-tab="trajectory-tab">Trajectory Intel</button>
+          <button class="tab-btn" data-tab="camera-list-tab">Camera Grid</button>
+          <button class="tab-btn" data-tab="watchlist-tab">Watchlist DB</button>
+        </div>
+
+        <!-- Tab 1: Trajectory Intel -->
+        <div class="sidebar-tab-content active" id="trajectory-tab">
+          
+          <!-- Target Plate Summary Card -->
+          <div class="target-summary-card" id="target-summary-card">
+            <div class="target-header">
+              <div>
+                <div style="font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 2px;">TARGET VEHICLE</div>
+                <div class="target-plate-badge ind" id="inspector-plate">HR26DQ5551</div>
+              </div>
+              <span class="target-status-tag tracked" id="inspector-status">TRACKED - ACTIVE</span>
+            </div>
+
+            <div class="target-grid-details">
+              <div class="target-detail-item">
+                <div class="detail-label">Vehicle Model</div>
+                <div class="detail-val" id="inspector-vehicle">Hyundai Verna (White)</div>
+              </div>
+              <div class="target-detail-item">
+                <div class="detail-label">Total Distance</div>
+                <div class="detail-val" id="inspector-distance">21.4 km</div>
+              </div>
+              <div class="target-detail-item">
+                <div class="detail-label">Avg Travel Speed</div>
+                <div class="detail-val" id="inspector-avg-speed">60.3 km/h</div>
+              </div>
+              <div class="target-detail-item">
+                <div class="detail-label">Trip Duration</div>
+                <div class="detail-val" id="inspector-duration">31m 56s</div>
+              </div>
+              <div class="target-detail-item" style="grid-column: span 2;">
+                <div class="detail-label">Registered Owner / Fleet</div>
+                <div class="detail-val" id="inspector-owner" style="font-size: 0.8rem;">R. Sharma / TechCorp Fleet</div>
+              </div>
+              <div class="target-detail-item" style="grid-column: span 2;">
+                <div class="detail-label">Violations Detected</div>
+                <div class="detail-val" id="inspector-violations" style="color: var(--accent-green);">0 Detected</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chronological Route Hops -->
+          <div class="route-timeline-container">
+            <div class="section-title-hud">
+              <span>Chronological Hops</span>
+              <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">MULTI-CAM CORRIDOR</span>
+            </div>
+            
+            <div class="timeline-hops-list" id="timeline-hops-list">
+              <!-- Dynamically populated via map.js -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Tab 2: Camera Grid -->
+        <div class="sidebar-tab-content" id="camera-list-tab">
+          <div class="section-title-hud">
+            <span>City Node Surveillance</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">12 NODES ONLINE</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;" id="camera-nodes-grid-list">
+            <!-- Populated via script -->
+          </div>
+        </div>
+
+        <!-- Tab 3: Watchlist Management -->
+        <div class="sidebar-tab-content" id="watchlist-tab">
+          <div class="section-title-hud">
+            <span>Security Hotlist / Watchlist</span>
+            <span class="badge" style="background: var(--accent-red); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">3 ACTIVE</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="target-summary-card alert-flagged">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="target-plate-badge" style="font-size: 0.95rem;">DL01AB1234</span>
+                <span class="target-status-tag watchlist">STOLEN #4092</span>
+              </div>
+              <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 6px;">
+                Toyota Fortuner (Black) &bull; Flagged at IGI Airport Expwy North
+              </div>
+              <button class="mini-action-btn track-btn" onclick="window.cityMap.loadTrajectory('DL01AB1234')" style="margin-top: 8px; width: 100%;">
+                📍 Track Escape Trajectory
+              </button>
+            </div>
+
+            <div class="target-summary-card alert-flagged">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="target-plate-badge" style="font-size: 0.95rem;">HR26CY9999</span>
+                <span class="target-status-tag watchlist">TOLL EVASION</span>
+              </div>
+              <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 6px;">
+                Heavy Commercial Carrier &bull; Flagged at Kherki Daula Toll
+              </div>
+              <button class="mini-action-btn track-btn" onclick="window.cityMap.loadTrajectory('HR26CY9999')" style="margin-top: 8px; width: 100%;">
+                📍 Track Route
+              </button>
+            </div>
+
+            <div class="target-summary-card alert-flagged">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="target-plate-badge" style="font-size: 0.95rem;">UP16EF7788</span>
+                <span class="target-status-tag watchlist">BANNED TRANSIT</span>
+              </div>
+              <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 6px;">
+                Commercial Tanker &bull; Banned Corridor Violation
+              </div>
+              <button class="mini-action-btn track-btn" onclick="window.cityMap.loadTrajectory('UP16EF7788')" style="margin-top: 8px; width: 100%;">
+                📍 Track Route
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- Center Container: GIS Interactive Map -->
+      <section class="map-viewport-container">
+        
+        <!-- GIS Map Canvas -->
+        <div id="gis-map"></div>
+
+        <!-- Floating Region Filter Pill (Top Left) -->
+        <div class="map-floating-overlay map-tools-top-left">
+          <div class="region-selector-pill">
+            <button class="region-btn active" onclick="window.cityMap.flyToRegion('cyber'); setActiveRegionBtn(this);">Cyber Hub</button>
+            <button class="region-btn" onclick="window.cityMap.flyToRegion('central'); setActiveRegionBtn(this);">Central Jct</button>
+            <button class="region-btn" onclick="window.cityMap.flyToRegion('expressway'); setActiveRegionBtn(this);">Expressway</button>
+            <button class="region-btn" onclick="window.cityMap.flyToRegion('ringroad'); setActiveRegionBtn(this);">Ring Road</button>
+          </div>
+        </div>
+
+        <!-- Floating Map Layer Toggles (Top Right) -->
+        <div class="map-floating-overlay map-layer-toggles">
+          <div style="font-family: var(--font-hud); font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan); text-transform: uppercase; margin-bottom: 2px;">
+            GIS Layers
+          </div>
+          <label class="layer-toggle-item">
+            <input type="checkbox" id="toggle-cameras" checked />
+            <span>Camera Nodes</span>
+          </label>
+          <label class="layer-toggle-item">
+            <input type="checkbox" id="toggle-heatmap" />
+            <span>Traffic Density Heatmap</span>
+          </label>
+        </div>
+
+        <!-- Bottom Trajectory Timeline Replay Floating Bar -->
+        <div class="timeline-replay-bar">
+          <div class="timeline-upper-row">
+            <div class="replay-telemetry-status">
+              <div class="telemetry-tag">
+                <span>TARGET:</span> <b id="replay-plate-tag">HR26DQ5551</b>
+              </div>
+              <div class="telemetry-tag">
+                <span>TIME:</span> <b id="replay-current-time">10:02:14</b>
+              </div>
+              <div class="telemetry-tag">
+                <span>SPEED:</span> <b id="replay-current-speed">78 km/h</b>
+              </div>
+              <div class="telemetry-tag">
+                <span>NODE:</span> <b id="replay-current-cam">IGI Airport Expressway North</b>
+              </div>
+            </div>
+
+            <!-- Playback Control Buttons -->
+            <div class="replay-controls">
+              <button class="replay-btn" id="btn-step-back" title="Step Back 20%">&#9664;&#9664;</button>
+              <button class="replay-btn primary" id="btn-play-pause" title="Play / Pause Replay">&#9658;</button>
+              <button class="replay-btn" id="btn-step-fwd" title="Step Forward 20%">&#9654;&#9654;</button>
+              
+              <select class="speed-select" id="replay-speed-select" title="Playback Speed Multiplier">
+                <option value="1.0">1.0x</option>
+                <option value="2.0">2.0x</option>
+                <option value="4.0">4.0x</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Progress Slider -->
+          <div class="timeline-scrubber-wrapper">
+            <span class="time-label">00:00</span>
+            <input type="range" class="timeline-slider" id="replay-slider" min="0" max="100" value="0" />
+            <span class="time-label right">100%</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Sidebar: Live Surveillance Feed & Watchlist Alert Drawer -->
+      <aside class="sidebar-right">
+        <div class="right-header">
+          <div class="live-indicator">
+            <div class="live-dot"></div>
+            <span>LIVE OCR TELEMETRY</span>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">AUTO-SCROLL</span>
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="live-filter-tabs">
+          <button class="filter-chip active" data-filter="all">All Traffic</button>
+          <button class="filter-chip" data-filter="alerts">⚠️ Hotlist</button>
+          <button class="filter-chip" data-filter="speeding">⚡ Speed > 75</button>
+        </div>
+
+        <!-- Live Detections Feed List -->
+        <div class="detections-feed-container" id="live-detections-feed">
+          <!-- Populated in real-time via websocket.js -->
+        </div>
+      </aside>
+
+    </main>
+
+  </div>
+
+  <!-- Fullscreen Urban Traffic Analytics Modal Drawer -->
+  <div class="analytics-drawer-modal" id="analytics-modal">
+    <div class="analytics-inner-container">
+      
+      <div class="analytics-header-row">
+        <div>
+          <div class="analytics-title">URBAN TRAFFIC <span>INTELLIGENCE & BOTTLENECK ANALYTICS</span></div>
+          <div style="color: var(--text-secondary); font-size: 0.85rem; font-family: var(--font-mono);">
+            REAL-TIME MULTI-SENSOR CONGESTION & ANPR VIOLATION TELEMETRY
+          </div>
+        </div>
+        <button class="close-analytics-btn" id="btn-close-analytics">
+          ✕ CLOSE ANALYTICS
+        </button>
+      </div>
+
+      <!-- KPI Summary Stat Cards -->
+      <div class="kpi-metric-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>24H CITY THROUGHPUT</span>
+            <span>🚗</span>
+          </div>
+          <div class="kpi-card-val" id="kpi-total-plates" style="color: var(--accent-cyan);">128,450</div>
+          <div class="kpi-card-trend trend-up">
+            ▲ +6.4% vs Yesterday
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>NETWORK FLOW SPEED</span>
+            <span>⚡</span>
+          </div>
+          <div class="kpi-card-val" style="color: var(--accent-green);">52.4 km/h</div>
+          <div class="kpi-card-trend trend-up">
+            ▲ Flow optimal in Cyber Hub
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>PEAK CONGESTION INDEX</span>
+            <span>🚦</span>
+          </div>
+          <div class="kpi-card-val" style="color: var(--accent-amber);">84%</div>
+          <div class="kpi-card-trend trend-down">
+            ▼ Critical at IFFCO Chowk
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>HOTLIST INTERCEPTIONS</span>
+            <span>🚨</span>
+          </div>
+          <div class="kpi-card-val" style="color: var(--accent-red);">18</div>
+          <div class="kpi-card-trend trend-up">
+            ▲ 100% Intercept Rate
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Layout Grid -->
+      <div class="charts-layout-grid">
+        
+        <!-- Chart 1: Hourly Volume -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Hourly Traffic Volume (24H Peak vs Normal)</div>
+            <span class="badge-tag">HOURLY INGRESS</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="chart-hourly-volume"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Vehicle Distribution -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Vehicle Classification Distribution</div>
+            <span class="badge-tag">AI OCR MODEL</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="chart-vehicle-dist"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 3: Top Congested Nodes -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Top Congested Intersections & Delay Index</div>
+            <span class="badge-tag">BOTTLENECK RANK</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="chart-congested-nodes"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 4: Violations & Watchlist Hits -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Weekly Speed Violations & Watchlist Hits</div>
+            <span class="badge-tag">ENFORCEMENT</span>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="chart-violations-trend"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Watchlist Alert Banner Toast (Top Right) -->
+  <div class="alert-banner-toast" id="watchlist-alert-banner">
+    <div class="alert-toast-header">
+      <div class="alert-title-tag">
+        <span>🚨</span> SECURITY HOTLIST HIT
+      </div>
+      <button id="btn-toast-dismiss" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 1rem;">✕</button>
+    </div>
+    <div class="alert-toast-body">
+      <div>TARGET PLATE: <b id="alert-toast-plate" style="color: #facc15; font-family: var(--font-mono); font-size: 1.1rem; background: #000; padding: 2px 6px; border-radius: 4px;">DL01AB1234</b></div>
+      <div>LOCATION: <span id="alert-toast-location">IGI Airport Expressway North</span></div>
+      <div style="color: #fca5a5; font-size: 0.8rem;" id="alert-toast-reason">CRITICAL: Reported Stolen (FIR #4092)</div>
+    </div>
+    <div class="alert-actions-row">
+      <button class="btn-alert-action" id="btn-toast-track">📍 Track on Map</button>
+    </div>
+  </div>
+
+  <!-- External CDNs -->
+  <!-- Leaflet GIS JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Leaflet Heatmap Plugin -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <!-- Chart.js 4.x -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Application Modules -->
+  <script src="static/js/map.js"></script>
+  <script src="static/js/analytics.js"></script>
+  <script src="static/js/websocket.js"></script>
+
+  <!-- Main Bootstrapper -->
+  <script>
+    // Region pill active state helper
+    function setActiveRegionBtn(btn) {
+      document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Initialize GIS City Map
+      window.cityMap = new CityGISMap();
+      window.cityMap.init();
+
+      // 2. Initialize Traffic Analytics
+      window.analytics = new TrafficAnalytics();
+      window.analytics.init();
+
+      // 3. Initialize Live Surveillance WebSocket Stream
+      window.stream = new SurveillanceStream();
+      window.stream.init();
+
+      // 4. Populate Camera Tab list
+      const camListElem = document.getElementById('camera-nodes-grid-list');
+      if (camListElem) {
+        camListElem.innerHTML = window.cityMap.cameras.map(c => `
+          <div class="hop-item" onclick="window.cityMap.map.flyTo([${c.lat}, ${c.lng}], 15); window.cityMap.cameraMarkers.get('${c.id}').openPopup();">
+            <div class="camera-pulse-dot ${c.status === 'normal' ? 'green' : c.status === 'moderate' ? 'amber' : 'red'}" style="margin-top: 4px;"></div>
+            <div class="hop-content">
+              <div class="hop-cam-name">
+                <span>${c.name}</span>
+                <span class="badge-tag">${c.id}</span>
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">
+                SPEED LIMIT: ${c.speedLimit} km/h | RES: ${c.resolution}
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 5. Setup Sidebar Tab Switching
+      document.querySelectorAll('.sidebar-tabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.sidebar-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.sidebar-tab-content').forEach(c => c.classList.remove('active'));
+          
+          btn.classList.add('active');
+          const targetTab = btn.getAttribute('data-tab');
+          const tabElem = document.getElementById(targetTab);
+          if (tabElem) tabElem.classList.add('active');
+        });
+      });
+
+      // 6. Search Bar Autocomplete & Actions
+      const searchInput = document.getElementById('plate-search-bar');
+      const suggestionsBox = document.getElementById('search-suggestions-box');
+      const searchBtn = document.getElementById('btn-submit-search');
+
+      searchInput.addEventListener('focus', () => {
+        suggestionsBox.classList.add('active');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.header-search')) {
+          suggestionsBox.classList.remove('active');
+        }
+      });
+
+      document.querySelectorAll('.suggestion-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const plate = item.getAttribute('data-plate');
+          searchInput.value = plate;
+          suggestionsBox.classList.remove('active');
+          window.cityMap.loadTrajectory(plate);
+          // Switch to trajectory tab if not already
+          document.querySelector('.tab-btn[data-tab="trajectory-tab"]').click();
+        });
+      });
+
+      searchBtn.addEventListener('click', () => {
+        const query = searchInput.value.trim();
+        if (query) {
+          window.cityMap.loadTrajectory(query);
+          suggestionsBox.classList.remove('active');
+          document.querySelector('.tab-btn[data-tab="trajectory-tab"]').click();
+        }
+      });
+
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          searchBtn.click();
+        }
+      });
+
+      // 7. Analytics Drawer Modal Toggle
+      const analyticsModal = document.getElementById('analytics-modal');
+      const toggleAnalyticsBtn = document.getElementById('btn-toggle-analytics');
+      const closeAnalyticsBtn = document.getElementById('btn-close-analytics');
+
+      toggleAnalyticsBtn.addEventListener('click', () => {
+        analyticsModal.classList.toggle('active');
+      });
+
+      closeAnalyticsBtn.addEventListener('click', () => {
+        analyticsModal.classList.remove('active');
+      });
+
+      // 8. Alerts indicator shortcut
+      document.getElementById('btn-alerts-indicator').addEventListener('click', () => {
+        document.querySelector('.tab-btn[data-tab="watchlist-tab"]').click();
+      });
+
+      // 9. Real-time IST & UTC Telemetry Clocks
+      function updateClocks() {
+        const now = new Date();
+        const istStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false }) + ' IST';
+        const utcStr = now.toUTCString().split(' ')[4] + ' UTC';
+        
+        document.getElementById('clock-ist').textContent = istStr;
+        document.getElementById('clock-utc').textContent = utcStr;
+      }
+      setInterval(updateClocks, 1000);
+      updateClocks();
+    });
+  </script>
+</body>
+</html>

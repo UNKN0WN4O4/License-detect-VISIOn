@@ -1,0 +1,241 @@
+{
+  "city": "Delhi NCR / Cyber City Corridor",
+  "center": {
+    "lat": 28.4850,
+    "lng": 77.0800,
+    "zoom": 12
+  },
+  "regions": {
+    "cyber": "Cyber City & Golf Course Corridor",
+    "central": "MG Road & Central Junctions",
+    "expressway": "Airport & NH-48 Expressways",
+    "ringroad": "Outer Ring Road Corridors"
+  },
+  "cameras": [
+    {
+      "id": "CAM-01",
+      "name": "Cyber Hub North Gate",
+      "lat": 28.4986,
+      "lng": 77.0878,
+      "region": "cyber",
+      "corridor": "Cyber City Arterial",
+      "speedLimit": 60,
+      "status": "normal",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-01/live",
+      "adjacentCameras": ["CAM-11", "CAM-02", "CAM-06"],
+      "distancesKm": {
+        "CAM-11": 0.6,
+        "CAM-02": 2.3,
+        "CAM-06": 6.8
+      }
+    },
+    {
+      "id": "CAM-02",
+      "name": "MG Road Metro Junction",
+      "lat": 28.4796,
+      "lng": 77.0802,
+      "region": "central",
+      "corridor": "MG Road Commercial Corridor",
+      "speedLimit": 50,
+      "status": "moderate",
+      "fps": 25,
+      "resolution": "1080p",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-02/live",
+      "adjacentCameras": ["CAM-01", "CAM-03", "CAM-11"],
+      "distancesKm": {
+        "CAM-01": 2.3,
+        "CAM-03": 1.4,
+        "CAM-11": 2.8
+      }
+    },
+    {
+      "id": "CAM-03",
+      "name": "IFFCO Chowk Flyover",
+      "lat": 28.4721,
+      "lng": 77.0689,
+      "region": "central",
+      "corridor": "NH-48 Expressway Interchange",
+      "speedLimit": 70,
+      "status": "congested",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-03/live",
+      "adjacentCameras": ["CAM-02", "CAM-05", "CAM-04", "CAM-07"],
+      "distancesKm": {
+        "CAM-02": 1.4,
+        "CAM-05": 12.1,
+        "CAM-04": 6.7,
+        "CAM-07": 15.8
+      }
+    },
+    {
+      "id": "CAM-04",
+      "name": "Golf Course Extn Road",
+      "lat": 28.4184,
+      "lng": 77.0945,
+      "region": "cyber",
+      "corridor": "Golf Course Southern Peripheral",
+      "speedLimit": 65,
+      "status": "normal",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-04/live",
+      "adjacentCameras": ["CAM-03", "CAM-12", "CAM-01"],
+      "distancesKm": {
+        "CAM-03": 6.7,
+        "CAM-12": 4.9,
+        "CAM-01": 9.2
+      }
+    },
+    {
+      "id": "CAM-05",
+      "name": "Kherki Daula Toll Plaza",
+      "lat": 28.3842,
+      "lng": 76.9934,
+      "region": "expressway",
+      "corridor": "NH-48 Gateway Toll",
+      "speedLimit": 40,
+      "status": "congested",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-05/live",
+      "adjacentCameras": ["CAM-03", "CAM-12"],
+      "distancesKm": {
+        "CAM-03": 12.1,
+        "CAM-12": 6.2
+      }
+    },
+    {
+      "id": "CAM-06",
+      "name": "IGI Airport Expressway North",
+      "lat": 28.5562,
+      "lng": 77.1000,
+      "region": "expressway",
+      "corridor": "Airport Expressway Corridor",
+      "speedLimit": 80,
+      "status": "normal",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-06/live",
+      "adjacentCameras": ["CAM-01", "CAM-07"],
+      "distancesKm": {
+        "CAM-01": 6.8,
+        "CAM-07": 7.3
+      }
+    },
+    {
+      "id": "CAM-07",
+      "name": "Ring Road - Dhaula Kuan",
+      "lat": 28.5912,
+      "lng": 77.1615,
+      "region": "ringroad",
+      "corridor": "Ring Road Arterial",
+      "speedLimit": 60,
+      "status": "moderate",
+      "fps": 30,
+      "resolution": "1080p",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-07/live",
+      "adjacentCameras": ["CAM-06", "CAM-08", "CAM-09", "CAM-03"],
+      "distancesKm": {
+        "CAM-06": 7.3,
+        "CAM-08": 5.4,
+        "CAM-09": 6.9,
+        "CAM-03": 15.8
+      }
+    },
+    {
+      "id": "CAM-08",
+      "name": "AIIMS South Extn Crossing",
+      "lat": 28.5672,
+      "lng": 77.2100,
+      "region": "ringroad",
+      "corridor": "Ring Road Southern Sector",
+      "speedLimit": 50,
+      "status": "congested",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-08/live",
+      "adjacentCameras": ["CAM-07", "CAM-09", "CAM-10"],
+      "distancesKm": {
+        "CAM-07": 5.4,
+        "CAM-09": 7.2,
+        "CAM-10": 18.5
+      }
+    },
+    {
+      "id": "CAM-09",
+      "name": "Connaught Place Inner Circle",
+      "lat": 28.6315,
+      "lng": 77.2167,
+      "region": "central",
+      "corridor": "Central Capital Sector",
+      "speedLimit": 40,
+      "status": "moderate",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-09/live",
+      "adjacentCameras": ["CAM-07", "CAM-08"],
+      "distancesKm": {
+        "CAM-07": 6.9,
+        "CAM-08": 7.2
+      }
+    },
+    {
+      "id": "CAM-10",
+      "name": "Noida-Greater Noida Link",
+      "lat": 28.5355,
+      "lng": 77.3910,
+      "region": "expressway",
+      "corridor": "Noida Expressway Toll Gateway",
+      "speedLimit": 90,
+      "status": "normal",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-10/live",
+      "adjacentCameras": ["CAM-08"],
+      "distancesKm": {
+        "CAM-08": 18.5
+      }
+    },
+    {
+      "id": "CAM-11",
+      "name": "Shankar Chowk Cloverleaf",
+      "lat": 28.5028,
+      "lng": 77.0898,
+      "region": "cyber",
+      "corridor": "NH-48 / Cyber City Cloverleaf",
+      "speedLimit": 60,
+      "status": "moderate",
+      "fps": 30,
+      "resolution": "4K",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-11/live",
+      "adjacentCameras": ["CAM-01", "CAM-02", "CAM-03"],
+      "distancesKm": {
+        "CAM-01": 0.6,
+        "CAM-02": 2.8,
+        "CAM-03": 4.1
+      }
+    },
+    {
+      "id": "CAM-12",
+      "name": "Sohna Road Badshahpur",
+      "lat": 28.3965,
+      "lng": 77.0520,
+      "region": "central",
+      "corridor": "Sohna Elevated Corridor",
+      "speedLimit": 60,
+      "status": "normal",
+      "fps": 25,
+      "resolution": "1080p",
+      "streamUrl": "rtsp://sim-cctv.delhi-traffic.gov/cam-12/live",
+      "adjacentCameras": ["CAM-04", "CAM-05", "CAM-03"],
+      "distancesKm": {
+        "CAM-04": 4.9,
+        "CAM-05": 6.2,
+        "CAM-03": 8.5
+      }
+    }
+  ]
+}
