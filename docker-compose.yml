@@ -1,0 +1,21 @@
+services:
+  anpr-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bel-anpr-city-platform
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    volumes:
+      # Persist the database and synthetic crops across container restarts
+      - ./anpr_platform.db:/app/anpr_platform.db
+      - ./simulation/crops:/app/simulation/crops
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
