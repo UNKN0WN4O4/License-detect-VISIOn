@@ -167,6 +167,24 @@ class TrajectoryService:
             }
             hops.append(hop)
 
+        # Formatted waypoint hops for UI / E2E test client
+        formatted_hops = []
+        for i, pt in enumerate(detection_points):
+            spd = "60 km/h"
+            if i < len(hops):
+                spd = f"{round(hops[i]['speed_kmh'])} km/h"
+            elif i > 0 and (i - 1) < len(hops):
+                spd = f"{round(hops[i-1]['speed_kmh'])} km/h"
+
+            formatted_hops.append({
+                "camId": pt["camera_id"],
+                "camName": pt["camera_name"],
+                "time": pt["timestamp"].split("T")[-1] if "T" in pt["timestamp"] else pt["timestamp"],
+                "speed": spd,
+                "lat": pt["latitude"],
+                "lng": pt["longitude"]
+            })
+
         # Overall Journey Metrics
         first_time = detections[0].timestamp
         last_time = detections[-1].timestamp
@@ -191,5 +209,6 @@ class TrajectoryService:
             "speed_anomalies_detected": speed_anomalies_count,
             "detection_points": detection_points,
             "hops": hops,
+            "waypoint_hops": formatted_hops,
             "route_coordinates": route_coordinates
         }

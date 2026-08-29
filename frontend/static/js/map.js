@@ -12,6 +12,10 @@ class CityGISMap {
     this.heatLayer = null;
     this.vehicleMarker = null;
 
+    // 3D Spatial Intelligence Subsystem (God's Eye Recon)
+    this.godsEye3D = null;
+    this.activeMode = '2D'; // '2D' or '3D'
+
     // Active trajectory state
     this.activeTrajectory = null;
     this.playback = {
@@ -130,10 +134,6 @@ class CityGISMap {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
     }).addTo(this.map);
 
-
-    // Zoom control at bottom right
-    L.control.zoom({ position: 'bottomright' }).addTo(this.map);
-
     // Add Layer Groups
     this.cameraLayerGroup.addTo(this.map);
     this.trajectoryLayerGroup.addTo(this.map);
@@ -150,8 +150,21 @@ class CityGISMap {
     // Init live WebSocket for real-time alerts
     this.initWebSocket();
 
+    // Initialize 3D God's Eye Spatial Recon Subsystem (CesiumJS)
+    if (typeof window.GodsEye3DMap === 'function') {
+      this.godsEye3D = new window.GodsEye3DMap(this);
+      this.godsEye3D.init('gods-eye-3d-container');
+    }
+
     // Load default demo trajectory
     this.loadTrajectory("HR26DQ5551");
+  }
+
+  setMode(mode) {
+    this.activeMode = mode;
+    if (this.godsEye3D) {
+      this.godsEye3D.setMode(mode);
+    }
   }
 
   renderCameraNodes() {
@@ -311,6 +324,163 @@ class CityGISMap {
     }
   }
 
+  // =========================================================================
+  // Real-World Street Routing & Geometry Calculation Engine
+  // =========================================================================
+
+  calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  calculateBearing(lat1, lon1, lat2, lon2) {
+    const y = Math.sin((lon2 - lon1) * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180);
+    const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+              Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos((lon2 - lon1) * Math.PI / 180);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  async fetchRoadGeometry(hops) {
+    if (!hops || hops.length < 2) {
+      if (hops && hops.length === 1) {
+        return {
+          points: [{ lat: hops[0].lat, lng: hops[0].lng }],
+          cumDistances: [0],
+          totalDistance: 0,
+          hopProgresses: [0],
+          source: 'single_point'
+        };
+      }
+      return null;
+    }
+
+    const coordsStr = hops.map(h => `${h.lng.toFixed(6)},${h.lat.toFixed(6)}`).join(';');
+
+    // 1. Try Backend Routing Service Proxy
+    try {
+      const resp = await fetch(`/api/routing/route?coordinates=${encodeURIComponent(coordsStr)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.status === 'ok' && data.coordinates && data.coordinates.length > 1) {
+          return this.processRoadCoordinates(data.coordinates, hops, data.source || 'osrm_backend');
+        }
+      }
+    } catch (err) {
+      console.warn('Backend routing proxy unavailable, attempting direct OSRM API:', err);
+    }
+
+    // 2. Direct OpenStreetMap OSRM Public Driving Server
+    try {
+      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+      const resp = await fetch(osrmUrl);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+          return this.processRoadCoordinates(
+            data.routes[0].geometry.coordinates,
+            hops,
+            'osrm_public_direct'
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('Direct OSRM query failed, falling back to smooth spline interpolator:', err);
+    }
+
+    // 3. Fallback: Smooth spline road approximation
+    return this.generateSplineRoadGeometry(hops);
+  }
+
+  processRoadCoordinates(rawCoords, hops, source = 'osrm') {
+    // rawCoords is array of [lon, lat]
+    const points = rawCoords.map(c => ({ lat: c[1], lng: c[0] }));
+    const cumDistances = [0];
+    let totalDist = 0;
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const segDist = this.calculateDistanceMeters(
+        points[i].lat, points[i].lng,
+        points[i + 1].lat, points[i + 1].lng
+      );
+      totalDist += segDist;
+      cumDistances.push(totalDist);
+    }
+
+    // Map each camera hop to its closest progress fraction along the road
+    const hopProgresses = [];
+    hops.forEach(hop => {
+      let closestIdx = 0;
+      let minD = Infinity;
+      points.forEach((p, idx) => {
+        const d = this.calculateDistanceMeters(hop.lat, hop.lng, p.lat, p.lng);
+        if (d < minD) {
+          minD = d;
+          closestIdx = idx;
+        }
+      });
+      const hopFrac = totalDist > 0 ? (cumDistances[closestIdx] / totalDist) : 0;
+      hopProgresses.push(hopFrac);
+    });
+
+    // Ensure monotonically increasing hop progresses
+    for (let i = 1; i < hopProgresses.length; i++) {
+      if (hopProgresses[i] <= hopProgresses[i - 1]) {
+        hopProgresses[i] = Math.min(1.0, hopProgresses[i - 1] + 0.05);
+      }
+    }
+    hopProgresses[0] = 0.0;
+    hopProgresses[hopProgresses.length - 1] = 1.0;
+
+    return {
+      points: points,
+      cumDistances: cumDistances,
+      totalDistance: totalDist,
+      hopProgresses: hopProgresses,
+      source: source
+    };
+  }
+
+  generateSplineRoadGeometry(hops, subdivisions = 16) {
+    if (hops.length < 2) return null;
+    const points = [];
+    const pts = [hops[0], ...hops, hops[hops.length - 1]];
+
+    for (let i = 1; i < pts.length - 2; i++) {
+      const p0 = pts[i - 1];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2];
+
+      for (let s = 0; s < subdivisions; s++) {
+        const t = s / subdivisions;
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        const lat = 0.5 * ((2 * p1.lat) +
+                           (-p0.lat + p2.lat) * t +
+                           (2 * p0.lat - 5 * p1.lat + 4 * p2.lat - p3.lat) * t2 +
+                           (-p0.lat + 3 * p1.lat - 3 * p2.lat + p3.lat) * t3);
+
+        const lng = 0.5 * ((2 * p1.lng) +
+                           (-p0.lng + p2.lng) * t +
+                           (2 * p0.lng - 5 * p1.lng + 4 * p2.lng - p3.lng) * t2 +
+                           (-p0.lng + 3 * p1.lng - 3 * p2.lng + p3.lng) * t3);
+
+        points.push({ lat, lng });
+      }
+    }
+    points.push({ lat: hops[hops.length - 1].lat, lng: hops[hops.length - 1].lng });
+
+    const rawCoords = points.map(p => [p.lng, p.lat]);
+    return this.processRoadCoordinates(rawCoords, hops, 'spline_fallback');
+  }
+
   // Load and visualize trajectory for a plate
   async loadTrajectory(plateNumber) {
     if (!plateNumber) return;
@@ -386,10 +556,27 @@ class CityGISMap {
       this.trajectoriesDatabase[cleanPlate] = data;
     }
 
+    // 4. Fetch Real Street Road Geometry from Routing API
+    if (!data.roadGeometry || data.roadGeometry.points.length < 2) {
+      const roadGeometry = await this.fetchRoadGeometry(data.hops);
+      if (roadGeometry) {
+        data.roadGeometry = roadGeometry;
+        const km = (roadGeometry.totalDistance / 1000).toFixed(1);
+        data.totalDistance = `${km} km (Roadway)`;
+        const estMinutes = Math.max(5, Math.round(roadGeometry.totalDistance / 1000 / 55 * 60));
+        data.travelDuration = `${estMinutes}m 40s`;
+      }
+    }
+
     this.activeTrajectory = data;
     this.renderTrajectoryOnMap(data);
     this.updateInspectorSidebar(data);
     this.resetPlayback();
+
+    // Synchronize with 3D God's Eye Spatial Recon
+    if (this.godsEye3D && this.godsEye3D.isInitialized) {
+      this.godsEye3D.render3DTrajectory(data);
+    }
 
     // Fly to trajectory bounds
     if (data.hops.length > 0) {
@@ -398,31 +585,36 @@ class CityGISMap {
     }
   }
 
-
   renderTrajectoryOnMap(data) {
     this.trajectoryLayerGroup.clearLayers();
 
-    const latLngs = data.hops.map(h => [h.lat, h.lng]);
+    // Get street road points if available, otherwise hop waypoints
+    let roadLatLngs = [];
+    if (data.roadGeometry && data.roadGeometry.points && data.roadGeometry.points.length > 1) {
+      roadLatLngs = data.roadGeometry.points.map(p => [p.lat, p.lng]);
+    } else {
+      roadLatLngs = data.hops.map(h => [h.lat, h.lng]);
+    }
 
-    // 1. Glowing background polyline
-    const glowLine = L.polyline(latLngs, {
+    // 1. Glowing outer road ribbon
+    const glowLine = L.polyline(roadLatLngs, {
       color: data.isWatchlist ? '#ef4444' : '#00f2fe',
       weight: 8,
-      opacity: 0.35,
+      opacity: 0.38,
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(this.trajectoryLayerGroup);
 
-    // 2. Animated dashed neon core line
-    const coreLine = L.polyline(latLngs, {
+    // 2. Animated dashed neon street trajectory line
+    const coreLine = L.polyline(roadLatLngs, {
       color: data.isWatchlist ? '#ff4d4d' : '#ffffff',
-      weight: 3,
-      opacity: 0.9,
+      weight: 3.5,
+      opacity: 0.95,
       dashArray: '8, 8',
       className: 'animated-trajectory-line'
     }).addTo(this.trajectoryLayerGroup);
 
-    // 3. Numbered waypoint pins at each hop
+    // 3. Numbered waypoint pins at each camera hop node
     data.hops.forEach((hop, index) => {
       const nodeIndex = index + 1;
       const waypointIcon = L.divIcon({
@@ -447,21 +639,26 @@ class CityGISMap {
       wpMarker.addTo(this.trajectoryLayerGroup);
     });
 
-    // 4. Moving Vehicle Marker
+    // 4. Moving Vehicle Marker (Initial Position & Orientation)
+    const initialPos = roadLatLngs[0] || [data.hops[0].lat, data.hops[0].lng];
+    const initialBearing = roadLatLngs.length > 1
+      ? this.calculateBearing(roadLatLngs[0][0], roadLatLngs[0][1], roadLatLngs[1][0], roadLatLngs[1][1])
+      : 0;
+
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-wrapper',
       html: `
-        <svg class="vehicle-marker-icon" id="live-vehicle-svg" width="36" height="36" viewBox="0 0 48 48" fill="none">
-          <circle cx="24" cy="24" r="20" fill="rgba(0, 242, 254, 0.2)" stroke="#00f2fe" stroke-width="2"/>
-          <path d="M24 10L32 32L24 27L16 32L24 10Z" fill="#00f2fe" stroke="#ffffff" stroke-width="1.5"/>
-          <circle cx="24" cy="24" r="3" fill="#ffffff"/>
+        <svg class="vehicle-marker-icon" id="live-vehicle-svg" width="38" height="38" viewBox="0 0 48 48" fill="none" style="transform: rotate(${initialBearing}deg);">
+          <circle cx="24" cy="24" r="22" fill="rgba(0, 242, 254, 0.25)" stroke="#00f2fe" stroke-width="2"/>
+          <path d="M24 8L34 34L24 28L14 34L24 8Z" fill="${data.isWatchlist ? '#ef4444' : '#00f2fe'}" stroke="#ffffff" stroke-width="1.5"/>
+          <circle cx="24" cy="24" r="3.5" fill="#ffffff"/>
         </svg>
       `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
+      iconSize: [38, 38],
+      iconAnchor: [19, 19]
     });
 
-    this.vehicleMarker = L.marker([data.hops[0].lat, data.hops[0].lng], {
+    this.vehicleMarker = L.marker(initialPos, {
       icon: vehicleIcon,
       zIndexOffset: 1000
     }).addTo(this.trajectoryLayerGroup);
@@ -504,9 +701,20 @@ class CityGISMap {
       </div>
     `).join('');
 
-    // Update bottom replay telemetry plate
+    // Update bottom replay telemetry plate & routing status
     const replayPlate = document.getElementById('replay-plate-tag');
     if (replayPlate) replayPlate.textContent = data.plate;
+
+    const replayRouting = document.getElementById('replay-routing-status');
+    if (replayRouting) {
+      if (data.roadGeometry && data.roadGeometry.source && data.roadGeometry.source.includes('osrm')) {
+        replayRouting.textContent = 'REAL STREET (OSRM)';
+        replayRouting.style.color = 'var(--accent-cyan)';
+      } else {
+        replayRouting.textContent = 'SMOOTH CORRIDOR';
+        replayRouting.style.color = 'var(--accent-amber)';
+      }
+    }
   }
 
   // =========================================================================
@@ -579,37 +787,92 @@ class CityGISMap {
     if (!this.activeTrajectory || !this.vehicleMarker) return;
 
     const hops = this.activeTrajectory.hops;
-    const numSegments = hops.length - 1;
-    if (numSegments <= 0) return;
+    if (!hops || hops.length === 0) return;
 
-    const scaledProgress = progress * numSegments;
-    const currentSegmentIndex = Math.min(Math.floor(scaledProgress), numSegments - 1);
-    const segmentProgress = scaledProgress - currentSegmentIndex;
+    const geom = this.activeTrajectory.roadGeometry;
+    let currentLat = hops[0].lat;
+    let currentLng = hops[0].lng;
+    let bearing = 0;
+    let currentHopIndex = 0;
 
-    const startHop = hops[currentSegmentIndex];
-    const endHop = hops[currentSegmentIndex + 1];
+    if (geom && geom.points && geom.points.length > 1) {
+      // 1. High-precision Road Network Navigation
+      const targetDist = progress * geom.totalDistance;
+      const cum = geom.cumDistances;
+      const pts = geom.points;
 
-    // Linear Interpolation for Lat/Lng
-    const currentLat = startHop.lat + (endHop.lat - startHop.lat) * segmentProgress;
-    const currentLng = startHop.lng + (endHop.lng - startHop.lng) * segmentProgress;
+      // Find exact road segment
+      let segIdx = 0;
+      for (let i = 0; i < cum.length - 1; i++) {
+        if (targetDist >= cum[i] && targetDist <= cum[i + 1]) {
+          segIdx = i;
+          break;
+        }
+        if (i === cum.length - 2) segIdx = i;
+      }
 
-    // Calculate Bearing Angle (degrees)
-    const y = Math.sin((endHop.lng - startHop.lng) * Math.PI / 180) * Math.cos(endHop.lat * Math.PI / 180);
-    const x = Math.cos(startHop.lat * Math.PI / 180) * Math.sin(endHop.lat * Math.PI / 180) -
-              Math.sin(startHop.lat * Math.PI / 180) * Math.cos(endHop.lat * Math.PI / 180) * Math.cos((endHop.lng - startHop.lng) * Math.PI / 180);
-    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+      const pStart = pts[segIdx];
+      const pEnd = pts[segIdx + 1] || pStart;
+      const segLength = cum[segIdx + 1] - cum[segIdx];
+      const segFrac = segLength > 0 ? ((targetDist - cum[segIdx]) / segLength) : 0;
 
+      // Smooth coordinate interpolation on current road link
+      currentLat = pStart.lat + (pEnd.lat - pStart.lat) * segFrac;
+      currentLng = pStart.lng + (pEnd.lng - pStart.lng) * segFrac;
+
+      // Calculate instantaneous road direction / heading with forward lookahead
+      const lookAheadIdx = Math.min(pts.length - 1, segIdx + 2);
+      const pLook = pts[lookAheadIdx];
+      bearing = this.calculateBearing(pStart.lat, pStart.lng, pLook.lat, pLook.lng);
+
+      // Determine active camera hop based on road progress
+      if (geom.hopProgresses) {
+        for (let h = 0; h < geom.hopProgresses.length; h++) {
+          if (progress >= geom.hopProgresses[h]) {
+            currentHopIndex = h;
+          }
+        }
+      }
+    } else {
+      // Fallback: Linear interpolation across hops
+      const numSegments = hops.length - 1;
+      if (numSegments <= 0) return;
+
+      const scaledProgress = progress * numSegments;
+      currentHopIndex = Math.min(Math.floor(scaledProgress), numSegments - 1);
+      const segmentProgress = scaledProgress - currentHopIndex;
+
+      const startHop = hops[currentHopIndex];
+      const endHop = hops[currentHopIndex + 1];
+
+      currentLat = startHop.lat + (endHop.lat - startHop.lat) * segmentProgress;
+      currentLng = startHop.lng + (endHop.lng - startHop.lng) * segmentProgress;
+      bearing = this.calculateBearing(startHop.lat, startHop.lng, endHop.lat, endHop.lng);
+    }
+
+    // Update 2D Leaflet Vehicle Marker Position & Bearing
     this.vehicleMarker.setLatLng([currentLat, currentLng]);
 
-    // Rotate vehicle icon
     const iconElem = document.getElementById('live-vehicle-svg');
     if (iconElem) {
       iconElem.style.transform = `rotate(${bearing}deg)`;
     }
 
-    // Highlight active hop in sidebar
+    // Synchronize with 3D God's Eye (CesiumJS) Map
+    const activeHop = hops[Math.min(currentHopIndex, hops.length - 1)];
+    const nextHop = hops[Math.min(currentHopIndex + 1, hops.length - 1)];
+
+    if (this.godsEye3D && this.godsEye3D.isInitialized) {
+      this.godsEye3D.updatePlaybackPosition(progress, activeHop, nextHop, {
+        lat: currentLat,
+        lng: currentLng,
+        bearing: bearing
+      });
+    }
+
+    // Highlight active hop in sidebar timeline
     document.querySelectorAll('.hop-item').forEach((elem, idx) => {
-      if (idx === currentSegmentIndex) {
+      if (idx === currentHopIndex) {
         elem.classList.add('active');
       } else {
         elem.classList.remove('active');
@@ -621,24 +884,56 @@ class CityGISMap {
     const teleSpeed = document.getElementById('replay-current-speed');
     const teleCam = document.getElementById('replay-current-cam');
 
-    if (teleTime) teleTime.textContent = startHop.time;
-    if (teleSpeed) teleSpeed.textContent = startHop.speed;
-    if (teleCam) teleCam.textContent = startHop.camName;
+    if (teleTime) teleTime.textContent = activeHop.time;
+    if (teleSpeed) teleSpeed.textContent = activeHop.speed;
+    if (teleCam) teleCam.textContent = activeHop.camName;
   }
 
   jumpToHop(index) {
     if (!this.activeTrajectory) return;
     const hops = this.activeTrajectory.hops;
+    const geom = this.activeTrajectory.roadGeometry;
+
     if (index >= 0 && index < hops.length) {
-      const fraction = index / (hops.length - 1);
+      let fraction = index / (hops.length - 1);
+      if (geom && geom.hopProgresses && geom.hopProgresses[index] !== undefined) {
+        fraction = geom.hopProgresses[index];
+      }
+
       this.setPlaybackProgress(fraction);
       const slider = document.getElementById('replay-slider');
       if (slider) slider.value = Math.floor(fraction * 100);
       this.map.panTo([hops[index].lat, hops[index].lng], { animate: true, duration: 0.5 });
+
+      if (this.activeMode === '3D' && this.godsEye3D && this.godsEye3D.viewer) {
+        this.godsEye3D.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(hops[index].lng, hops[index].lat - 0.005, 550),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-35),
+            roll: 0
+          },
+          duration: 1.0
+        });
+      }
     }
   }
 
   flyToRegion(region) {
+    if (this.activeMode === '3D' && this.godsEye3D && this.godsEye3D.viewer) {
+      const view = this.godsEye3D.regionViews[region] || this.godsEye3D.regionViews.cyber;
+      this.godsEye3D.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(view.lng, view.lat, view.alt),
+        orientation: {
+          heading: Cesium.Math.toRadians(view.heading),
+          pitch: Cesium.Math.toRadians(view.pitch),
+          roll: 0
+        },
+        duration: 1.5
+      });
+      return;
+    }
+
     const coords = {
       cyber: { center: [28.4986, 77.0878], zoom: 14 },
       central: { center: [28.4721, 77.0689], zoom: 13 },
@@ -647,6 +942,30 @@ class CityGISMap {
     };
     const target = coords[region] || coords.cyber;
     this.map.flyTo(target.center, target.zoom, { duration: 1.2 });
+  }
+
+  zoomIn() {
+    if (this.activeMode === '3D' && this.godsEye3D) {
+      this.godsEye3D.zoomIn();
+    } else if (this.map) {
+      this.map.zoomIn();
+    }
+  }
+
+  zoomOut() {
+    if (this.activeMode === '3D' && this.godsEye3D) {
+      this.godsEye3D.zoomOut();
+    } else if (this.map) {
+      this.map.zoomOut();
+    }
+  }
+
+  recenter() {
+    if (this.activeMode === '3D' && this.godsEye3D) {
+      this.godsEye3D.flyToDefaultView();
+    } else if (this.map) {
+      this.map.flyTo([28.4850, 77.0800], 12);
+    }
   }
 
   setupControls() {

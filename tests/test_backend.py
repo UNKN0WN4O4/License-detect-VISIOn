@@ -35,11 +35,9 @@ async def override_get_db():
             await session.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest.fixture(autouse=True)
 async def setup_test_db():
+    app.dependency_overrides[get_db] = override_get_db
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -55,6 +53,7 @@ async def setup_test_db():
 
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -270,3 +269,20 @@ async def test_watchlist_management():
         del_resp = await client.delete("/api/watchlist/WB02ZZ8888")
         assert del_resp.status_code == 200
         assert "removed" in del_resp.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_street_routing_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Route between Cyber City and IGI Airport corridor
+        coords = "77.1000,28.5562;77.0878,28.4986"
+        resp = await client.get(f"/api/routing/route?coordinates={coords}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert len(data["coordinates"]) >= 2
+        assert data["distance_km"] > 0
+        assert data["duration_minutes"] > 0
+        assert data["source"] in ["osrm_real_road_network", "fallback_interpolated_network"]
+

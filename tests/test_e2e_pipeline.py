@@ -19,6 +19,8 @@ if PROJECT_ROOT not in sys.path:
 from fastapi.testclient import TestClient
 from database.db import DatabaseManager
 from backend.app import app
+from backend.database import init_db
+import asyncio
 from simulation.scenario_generator import generate_baseline_dataset
 from simulation.plate_renderer import PlateCropRenderer
 
@@ -34,6 +36,7 @@ def setup_test_environment():
         except Exception:
             pass
 
+    asyncio.run(init_db())
     db = DatabaseManager(db_path=TEST_DB_PATH)
     cameras_config_file = os.path.join(PROJECT_ROOT, "config", "cameras.json")
     db.sync_cameras(cameras_config_file)

@@ -18,6 +18,7 @@ from backend.models import (
 from backend.alert_manager import AlertManager, normalize_plate
 from backend.trajectory_service import TrajectoryService
 from backend.analytics_service import AnalyticsService
+from backend.routing_service import RoutingService
 from backend.websocket_manager import ws_manager
 
 # Optional db_manager hook for backwards-compatibility testing
@@ -244,7 +245,6 @@ async def list_recent_detections(
 # ==========================================
 
 @app.get("/api/trajectory/{plate_number}", tags=["Trajectory Engine"])
-@app.get("/api/v1/trajectories/{plate_number}", tags=["Trajectory Engine"])
 async def get_vehicle_trajectory(
     plate_number: str,
     start_time: Optional[datetime] = None,
@@ -263,6 +263,28 @@ async def get_vehicle_trajectory(
         end_time=end_time,
         speed_anomaly_threshold_kmh=speed_anomaly_threshold_kmh
     )
+
+
+# ==========================================
+# Real-World Street Routing Engine
+# ==========================================
+
+@app.get("/api/routing/route", tags=["Routing Engine"])
+async def get_street_route(
+    coordinates: str = Query(..., description="Semicolon separated lng,lat pairs: lng1,lat1;lng2,lat2;..."),
+    overview: str = Query("full", description="Geometry detail: full, simplified, false"),
+    geometries: str = Query("geojson", description="Geometry format: geojson, polyline")
+):
+    """
+    Computes precise real-world street network driving route connecting camera waypoints.
+    Uses OSRM driving engine with caching and smooth fallback interpolation.
+    """
+    return await RoutingService.get_route(
+        coordinates_str=coordinates,
+        overview=overview,
+        geometries=geometries
+    )
+
 
 
 

@@ -9,7 +9,8 @@ __pycache__/
 htmlcov/
 
 # Local DBs if temporary (keep schema)
-# *.db
+*.db
+
 
 # Environments
 .env
