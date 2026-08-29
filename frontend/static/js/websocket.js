@@ -8,10 +8,11 @@ class SurveillanceStream {
     this.socket = null;
     this.isMuted = false;
     this.audioCtx = null;
-    this.currentFilter = 'all';
+    this.currentFilter = 'all'; // 'all', 'alerts', 'speeding'
     this.feedContainer = null;
     this.activeAlertCount = 3;
     this.simTimer = null;
+    this.allDetections = [];
 
     // Watchlist Database
     this.watchlist = new Map([
@@ -24,21 +25,130 @@ class SurveillanceStream {
     this.samplePlates = [
       { plate: "HR26DQ5551", camId: "CAM-01", camName: "Cyber Hub North Gate", type: "Sedan (White)", speed: "64 km/h", isWatchlist: false },
       { plate: "DL03CC8899", camId: "CAM-02", camName: "MG Road Metro Jct", type: "SUV (Black)", speed: "52 km/h", isWatchlist: false },
-      { plate: "DL01AB1234", camId: "CAM-06", camName: "IGI Airport Expressway North", type: "SUV (Black)", speed: "94 km/h", isWatchlist: true, reason: "Reported Stolen (FIR #4092)" },
+      { plate: "DL01AB1234", camId: "CAM-06", camName: "IGI Airport Expressway North", type: "Toyota Fortuner (Black)", speed: "94 km/h", isWatchlist: true, reason: "Reported Stolen (FIR #4092)" },
       { plate: "HR29AZ1234", camId: "CAM-03", camName: "IFFCO Chowk Flyover", type: "Hatchback (Silver)", speed: "68 km/h", isWatchlist: false },
-      { plate: "UP16BN4422", camId: "CAM-04", camName: "Golf Course Extn Rd", type: "EV Cab (Blue)", speed: "58 km/h", isWatchlist: false },
+      { plate: "UP16BN4422", camId: "CAM-04", camName: "Golf Course Extn Rd", type: "EV Cab (Blue)", speed: "82 km/h", isWatchlist: false },
       { plate: "HR26CY9999", camId: "CAM-05", camName: "Kherki Daula Toll", type: "Heavy Truck", speed: "78 km/h", isWatchlist: true, reason: "Multiple Toll Violations" },
-      { plate: "MH02CB4040", camId: "CAM-07", camName: "Ring Road - Dhaula Kuan", type: "Luxury Sedan", speed: "65 km/h", isWatchlist: false },
+      { plate: "MH02CB4040", camId: "CAM-07", camName: "Ring Road - Dhaula Kuan", type: "Luxury Sedan", speed: "88 km/h", isWatchlist: false },
       { plate: "KA03MG8899", camId: "CAM-12", camName: "Sohna Road Badshahpur", type: "EV SUV", speed: "48 km/h", isWatchlist: false },
-      { plate: "DL08AK1122", camId: "CAM-08", camName: "AIIMS South Extn", type: "Two-Wheeler", speed: "42 km/h", isWatchlist: false }
+      { plate: "UP16EF7788", camId: "CAM-03", camName: "IFFCO Chowk Flyover", type: "Commercial Tanker", speed: "62 km/h", isWatchlist: true, reason: "Banned Corridor Transit" },
+      { plate: "DL08AK1122", camId: "CAM-08", camName: "AIIMS South Extn", type: "Two-Wheeler", speed: "42 km/h", isWatchlist: false },
+      { plate: "HR10X1001", camId: "CAM-06", camName: "IGI Airport Expressway North", type: "Motorcycle (Sports)", speed: "102 km/h", isWatchlist: false }
     ];
   }
 
   init() {
     this.feedContainer = document.getElementById('live-detections-feed');
     this.setupAudio();
+    this.seedInitialDetections();
     this.setupEventListeners();
     this.connectWebSocket();
+  }
+
+  seedInitialDetections() {
+    const now = new Date();
+    this.allDetections = this.samplePlates.map((item, idx) => {
+      const pastTime = new Date(now.getTime() - idx * 45000);
+      const timeStr = pastTime.toTimeString().split(' ')[0];
+      const isWatchlistHit = item.isWatchlist || this.watchlist.has(item.plate);
+      const alertInfo = isWatchlistHit ? (this.watchlist.get(item.plate) || { reason: item.reason || "Hotlist Vehicle", level: "red" }) : null;
+      return {
+        ...item,
+        timestamp: timeStr,
+        id: `det_seed_${idx}_${Date.now()}`,
+        isWatchlist: isWatchlistHit,
+        alertInfo: alertInfo
+      };
+    });
+    this.renderFeed();
+  }
+
+  parseSpeed(speedVal) {
+    if (typeof speedVal === 'number') return speedVal;
+    if (!speedVal) return 50;
+    const match = String(speedVal).match(/\d+/);
+    return match ? parseInt(match[0], 10) : 50;
+  }
+
+  isItemMatchingFilter(item, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'alerts') {
+      return Boolean(item.isWatchlist || this.watchlist.has(item.plate));
+    }
+    if (filter === 'speeding') {
+      return this.parseSpeed(item.speed) >= 75;
+    }
+    return true;
+  }
+
+  setFilter(filter) {
+    this.currentFilter = filter;
+    document.querySelectorAll('.filter-chip').forEach(btn => {
+      if (btn.getAttribute('data-filter') === filter) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    this.renderFeed();
+  }
+
+  renderFeed() {
+    if (!this.feedContainer) return;
+    this.feedContainer.innerHTML = '';
+
+    const filtered = this.allDetections.filter(d => this.isItemMatchingFilter(d, this.currentFilter));
+
+    if (filtered.length === 0) {
+      const filterLabel = this.currentFilter === 'alerts' ? 'Hotlist Alerts' : this.currentFilter === 'speeding' ? 'Speeding (> 75 km/h)' : 'All Traffic';
+      this.feedContainer.innerHTML = `
+        <div style="text-align: center; padding: 40px 15px; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem;">
+          <div style="font-size: 1.8rem; margin-bottom: 8px;">📡</div>
+          <div style="color: var(--text-secondary); font-weight: 700;">No ${filterLabel} detections</div>
+          <div style="font-size: 0.72rem; margin-top: 4px;">Live telemetry stream buffer is monitoring...</div>
+        </div>
+      `;
+      return;
+    }
+
+    filtered.slice(0, 35).forEach(data => {
+      const card = this.createDetectionCardElement(data);
+      this.feedContainer.appendChild(card);
+    });
+  }
+
+  createDetectionCardElement(data) {
+    const isWatchlist = Boolean(data.isWatchlist || this.watchlist.has(data.plate));
+    const alertInfo = data.alertInfo || (isWatchlist ? (this.watchlist.get(data.plate) || { reason: data.reason || "Hotlist Vehicle", level: "red" }) : null);
+
+    const card = document.createElement('div');
+    card.className = `detection-card ${isWatchlist ? 'flagged-alert' : ''}`;
+    card.id = `det-card-${data.id || Date.now()}`;
+
+    const plateSvg = this.createPlateSvgDataUri(data.plate);
+    const speedNum = this.parseSpeed(data.speed);
+    const speedColor = speedNum >= 75 ? 'var(--accent-red)' : 'var(--accent-cyan)';
+
+    card.innerHTML = `
+      <div class="detection-top-row">
+        <span class="detected-plate">${data.plate}</span>
+        <span class="detection-cam-badge">${data.camName || data.camId}</span>
+      </div>
+      <div class="detection-media-row">
+        <img class="detection-crop-img" src="${plateSvg}" alt="Plate Crop" />
+        <div class="detection-info">
+          <span class="detection-veh-type">${data.type || 'Passenger Vehicle'}</span>
+          <span class="detection-time">TIME: ${data.timestamp || 'JUST NOW'} | SPEED: <b style="color: ${speedColor};">${data.speed || (speedNum + ' km/h')}</b></span>
+          ${isWatchlist && alertInfo ? `<span style="color: var(--accent-red); font-size: 0.72rem; font-weight: 700;">⚠️ ${alertInfo.reason}</span>` : ''}
+        </div>
+      </div>
+      <div class="detection-card-actions">
+        <button class="mini-action-btn track-btn" onclick="window.cityMap.loadTrajectory('${data.plate}')">
+          📍 Track Trajectory
+        </button>
+      </div>
+    `;
+    return card;
   }
 
   setupAudio() {
@@ -65,12 +175,12 @@ class SurveillanceStream {
     osc2.type = 'sine';
 
     if (type === 'danger') {
-      osc1.frequency.setValueAtTime(880, this.audioCtx.currentTime); // A5
+      osc1.frequency.setValueAtTime(880, this.audioCtx.currentTime);
       osc1.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 0.3);
-      osc2.frequency.setValueAtTime(1174, this.audioCtx.currentTime); // D6
+      osc2.frequency.setValueAtTime(1174, this.audioCtx.currentTime);
       osc2.frequency.exponentialRampToValueAtTime(587, this.audioCtx.currentTime + 0.3);
     } else {
-      osc1.frequency.setValueAtTime(523.25, this.audioCtx.currentTime); // C5
+      osc1.frequency.setValueAtTime(523.25, this.audioCtx.currentTime);
       osc1.frequency.exponentialRampToValueAtTime(659.25, this.audioCtx.currentTime + 0.2);
     }
 
@@ -125,7 +235,7 @@ class SurveillanceStream {
     this.updateConnectionStatus(true, "SIMULATED STREAM ACTIVE");
     if (this.simTimer) return;
 
-    // Feed a new detection every 2.8 to 4.5 seconds
+    // Feed a new detection every 3.2 seconds
     this.simTimer = setInterval(() => {
       const item = this.samplePlates[Math.floor(Math.random() * this.samplePlates.length)];
       const now = new Date();
@@ -154,57 +264,44 @@ class SurveillanceStream {
   }
 
   handleIncomingDetection(data) {
-    const isWatchlistHit = data.isWatchlist || this.watchlist.has(data.plate);
+    const isWatchlistHit = Boolean(data.isWatchlist || this.watchlist.has(data.plate));
     const alertInfo = isWatchlistHit ? (this.watchlist.get(data.plate) || { reason: data.reason || "Hotlist Vehicle", level: "red" }) : null;
 
+    const enriched = {
+      ...data,
+      isWatchlist: isWatchlistHit,
+      alertInfo: alertInfo,
+      id: data.id || `det_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    };
+
+    // Store in all detections list
+    this.allDetections.unshift(enriched);
+    if (this.allDetections.length > 100) {
+      this.allDetections.pop();
+    }
+
     if (isWatchlistHit) {
-      this.triggerWatchlistToast(data, alertInfo);
+      this.triggerWatchlistToast(enriched, alertInfo);
       this.playAlertChime('danger');
       this.incrementAlertCounter();
     }
 
-    this.prependDetectionCard(data, isWatchlistHit, alertInfo);
-  }
+    // If matches active filter, prepend to DOM smoothly
+    if (this.isItemMatchingFilter(enriched, this.currentFilter)) {
+      if (!this.feedContainer) return;
+      
+      // If empty notice is showing, clear it first
+      if (this.feedContainer.querySelector('.empty-feed-hud') || this.feedContainer.children.length === 1 && !this.feedContainer.children[0].classList.contains('detection-card')) {
+        this.feedContainer.innerHTML = '';
+      }
 
-  prependDetectionCard(data, isWatchlist, alertInfo) {
-    if (!this.feedContainer) return;
+      const card = this.createDetectionCardElement(enriched);
+      this.feedContainer.insertBefore(card, this.feedContainer.firstChild);
 
-    // Filter check
-    if (this.currentFilter === 'alerts' && !isWatchlist) return;
-    if (this.currentFilter === 'speeding' && parseInt(data.speed) < 75) return;
-
-    const card = document.createElement('div');
-    card.className = `detection-card ${isWatchlist ? 'flagged-alert' : ''}`;
-    card.id = `det-card-${data.id || Date.now()}`;
-
-    // Synthesize vehicle plate preview svg
-    const plateSvg = this.createPlateSvgDataUri(data.plate);
-
-    card.innerHTML = `
-      <div class="detection-top-row">
-        <span class="detected-plate">${data.plate}</span>
-        <span class="detection-cam-badge">${data.camName || data.camId}</span>
-      </div>
-      <div class="detection-media-row">
-        <img class="detection-crop-img" src="${plateSvg}" alt="Plate Crop" />
-        <div class="detection-info">
-          <span class="detection-veh-type">${data.type || 'Passenger Vehicle'}</span>
-          <span class="detection-time">TIME: ${data.timestamp || 'JUST NOW'} | SPEED: <b style="color: var(--accent-cyan);">${data.speed || '55 km/h'}</b></span>
-          ${isWatchlist ? `<span style="color: var(--accent-red); font-size: 0.72rem; font-weight: 700;">⚠️ ${alertInfo.reason}</span>` : ''}
-        </div>
-      </div>
-      <div class="detection-card-actions">
-        <button class="mini-action-btn track-btn" onclick="window.cityMap.loadTrajectory('${data.plate}')">
-          📍 Track Trajectory
-        </button>
-      </div>
-    `;
-
-    this.feedContainer.insertBefore(card, this.feedContainer.firstChild);
-
-    // Keep max 35 cards in DOM
-    if (this.feedContainer.children.length > 35) {
-      this.feedContainer.removeChild(this.feedContainer.lastChild);
+      // Keep max 35 cards in DOM
+      if (this.feedContainer.children.length > 35) {
+        this.feedContainer.removeChild(this.feedContainer.lastChild);
+      }
     }
   }
 
@@ -258,12 +355,12 @@ class SurveillanceStream {
   }
 
   setupEventListeners() {
-    // Filter chips
+    // Filter chips - delegate on click
     document.querySelectorAll('.filter-chip').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        this.currentFilter = e.target.getAttribute('data-filter') || 'all';
+        const chip = e.currentTarget;
+        const filterType = chip.getAttribute('data-filter') || 'all';
+        this.setFilter(filterType);
       });
     });
 
@@ -286,3 +383,4 @@ class SurveillanceStream {
 }
 
 window.SurveillanceStream = SurveillanceStream;
+

@@ -199,6 +199,12 @@
             <span style="font-size: 0.72rem; color: var(--text-muted);">12 NODES ONLINE</span>
           </div>
 
+          <div style="margin-bottom: 8px;">
+            <input type="text" id="camera-filter-input" placeholder="Filter cameras by name, ID or region..." 
+              style="width: 100%; background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); color: #fff; border-radius: 4px; padding: 5px 8px; font-size: 0.75rem; font-family: var(--font-mono); outline: none;" 
+              oninput="if(window.renderCamList) window.renderCamList(this.value);" />
+          </div>
+
           <div style="display: flex; flex-direction: column; gap: 8px;" id="camera-nodes-grid-list">
             <!-- Populated via script -->
           </div>
@@ -727,11 +733,20 @@
       window.stream = new SurveillanceStream();
       window.stream.init();
 
-      // 4. Populate Camera Tab list
+      // 4. Populate Camera Tab list with Search Filtering
       const camListElem = document.getElementById('camera-nodes-grid-list');
-      if (camListElem) {
-        camListElem.innerHTML = window.cityMap.cameras.map(c => `
-          <div class="hop-item" onclick="window.cityMap.map.flyTo([${c.lat}, ${c.lng}], 15); window.cityMap.cameraMarkers.get('${c.id}').openPopup();">
+      window.renderCamList = function(filterText = '') {
+        if (!camListElem || !window.cityMap) return;
+        const q = filterText.toLowerCase().trim();
+        const filteredCams = window.cityMap.cameras.filter(c => 
+          !q || c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.region && c.region.toLowerCase().includes(q))
+        );
+        if (filteredCams.length === 0) {
+          camListElem.innerHTML = '<div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 25px 10px; font-family: var(--font-mono);">No cameras matching filter</div>';
+          return;
+        }
+        camListElem.innerHTML = filteredCams.map(c => `
+          <div class="hop-item" onclick="window.cityMap.map.flyTo([${c.lat}, ${c.lng}], 15); const m = window.cityMap.cameraMarkers.get('${c.id}'); if(m) m.openPopup();">
             <div class="camera-pulse-dot ${c.status === 'normal' ? 'green' : c.status === 'moderate' ? 'amber' : 'red'}" style="margin-top: 4px;"></div>
             <div class="hop-content">
               <div class="hop-cam-name">
@@ -744,7 +759,8 @@
             </div>
           </div>
         `).join('');
-      }
+      };
+      window.renderCamList();
 
       // 5. Setup Sidebar Tab Switching
       document.querySelectorAll('.sidebar-tabs .tab-btn').forEach(btn => {
