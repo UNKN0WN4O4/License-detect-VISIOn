@@ -123,11 +123,13 @@ class CityGISMap {
       attributionControl: false
     });
 
-    // Custom Dark Tiles (CartoDB Dark Matter)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Custom Dark Tiles (CartoDB Dark Matter via Fastly CDN - no watermark)
+    L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd'
+      subdomains: 'abcd',
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
     }).addTo(this.map);
+
 
     // Zoom control at bottom right
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);

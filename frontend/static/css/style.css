@@ -489,10 +489,13 @@ body::before {
 }
 
 .sidebar-tab-content {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   display: none;
+  scrollbar-width: thin;
 }
 
 .sidebar-tab-content.active {
@@ -508,7 +511,7 @@ body::before {
   border-radius: var(--radius-md);
   padding: 14px;
   position: relative;
-  overflow: hidden;
+  flex-shrink: 0;
   box-shadow: var(--shadow-hud);
 }
 
@@ -529,7 +532,7 @@ body::before {
 .target-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 10px;
 }
 
@@ -584,15 +587,18 @@ body::before {
 .target-grid-details {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
 }
 
 .target-detail-item {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--border-subtle);
-  padding: 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .detail-label {
@@ -613,10 +619,12 @@ body::before {
 .route-timeline-container {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 12px;
 }
 
 .section-title-hud {
+
   font-family: var(--font-hud);
   font-size: 0.95rem;
   font-weight: 700;
@@ -1138,38 +1146,44 @@ body::before {
 
 /* Live Detections Feed List */
 .detections-feed-container {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  scrollbar-width: thin;
 }
 
 .detection-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
+  min-height: 110px;
+  box-sizing: border-box;
   transition: var(--transition);
   position: relative;
   overflow: hidden;
-  animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .detection-card:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(0, 242, 254, 0.3);
+  border-color: rgba(0, 242, 254, 0.4);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 
 .detection-card.flagged-alert {
   border-color: var(--accent-red);
-  background: rgba(35, 12, 18, 0.75);
+  background: rgba(35, 12, 18, 0.8);
   box-shadow: var(--shadow-alert);
 }
 
@@ -1185,6 +1199,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .detected-plate {
@@ -1197,7 +1212,10 @@ body::before {
   border-radius: 4px;
   border: 1px solid rgba(250, 204, 21, 0.3);
   letter-spacing: 1px;
+  display: inline-block;
+  white-space: nowrap;
 }
+
 
 .detection-cam-badge {
   font-size: 0.7rem;
