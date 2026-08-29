@@ -244,6 +244,7 @@ async def list_recent_detections(
 # ==========================================
 
 @app.get("/api/trajectory/{plate_number}", tags=["Trajectory Engine"])
+@app.get("/api/v1/trajectories/{plate_number}", tags=["Trajectory Engine"])
 async def get_vehicle_trajectory(
     plate_number: str,
     start_time: Optional[datetime] = None,
@@ -262,6 +263,7 @@ async def get_vehicle_trajectory(
         end_time=end_time,
         speed_anomaly_threshold_kmh=speed_anomaly_threshold_kmh
     )
+
 
 
 # ==========================================

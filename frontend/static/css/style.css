@@ -108,9 +108,11 @@ body::before {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  z-index: 100;
+  z-index: 2000;
+  position: relative;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
+
 
 .header-left {
   display: flex;
@@ -263,14 +265,16 @@ body::before {
   left: 0;
   width: 100%;
   background: var(--bg-secondary);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.95);
   max-height: 250px;
   overflow-y: auto;
-  z-index: 500;
+  z-index: 3000;
   display: none;
 }
+
 
 .search-suggestions.active {
   display: block;
